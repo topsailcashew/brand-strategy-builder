@@ -1,0 +1,39 @@
+@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Plus+Jakarta+Sans:wght@300..800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@variant dark (&:where(.dark, .dark *));
+
+:root {
+  --paper: #F9F8F6;
+  --white: #FFFFFF;
+  --ink: #1A1A1A;
+  --editorial-border: #E5E2DD;
+  --editorial-border-light: #F3F1ED;
+  --editorial-border-dark: #D1CDC7;
+  --editorial-secondary: #8C8882;
+}
+
+:root.dark, body.dark, .dark {
+  --paper: #121212;
+  --white: #1A1A1A;
+  --ink: #F9F8F6;
+  --editorial-border: #2D2D2D;
+  --editorial-border-light: #1C1C1C;
+  --editorial-border-dark: #444444;
+  --editorial-secondary: #A09E9A;
+}
+
+@theme {
+  --font-serif: "Lora", Georgia, serif;
+  --font-sans: "Plus Jakarta Sans", "Inter", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  
+  --color-paper: var(--paper);
+  --color-white: var(--white);
+  --color-ink: var(--ink);
+  --color-editorial-border: var(--editorial-border);
+  --color-editorial-border-light: var(--editorial-border-light);
+  --color-editorial-border-dark: var(--editorial-border-dark);
+  --color-editorial-secondary: var(--editorial-secondary);
+}
+

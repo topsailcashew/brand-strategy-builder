@@ -1,0 +1,6 @@
+{
+  "name": "Brand Strategy Builder",
+  "description": "An interactive full-stack brand building and strategy app that stress-tests business ideas and generates detailed customer personas, complete visual brand guides, and custom asset mood boards powered by Gemini.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

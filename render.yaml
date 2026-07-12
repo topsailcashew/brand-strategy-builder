@@ -1,0 +1,17 @@
+# Render Blueprint — deploys the full-stack app (Express + built SPA) as one
+# free web service. Create the service via render.com → New → Blueprint, then
+# set the two secret env vars (GEMINI_API_KEY, TAVILY_API_KEY) in the dashboard.
+services:
+  - type: web
+    name: brand-strategy-builder
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: node dist/server.cjs
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: GEMINI_API_KEY
+        sync: false   # set in the Render dashboard (secret)
+      - key: TAVILY_API_KEY
+        sync: false   # set in the Render dashboard (secret)
