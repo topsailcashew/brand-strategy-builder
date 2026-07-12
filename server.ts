@@ -14,6 +14,16 @@ dotenv.config();
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 
+// Health check for hosting platforms (Render/Cloud Run) and uptime monitoring.
+app.get('/healthz', (_req, res) => {
+  res.json({
+    status: 'ok',
+    gemini: !!process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY',
+    liveSearch: !!process.env.TAVILY_API_KEY,
+    time: new Date().toISOString()
+  });
+});
+
 // Cloud Run injects PORT (default 8080); fall back to 3000 for local dev.
 const PORT = Number(process.env.PORT) || 3000;
 
