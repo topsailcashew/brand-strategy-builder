@@ -8,9 +8,8 @@ import {
   ExternalLink, LogOut, Send, Cloud, CloudOff, RefreshCw, Circle,
   ShieldCheck
 } from 'lucide-react';
-import type { User } from 'firebase/auth';
 import { BrandData, BrandGuide, CustomerPersona, Competitor, ReferenceBrand, MarketResearch, IdeaEvaluation, EvaluationItem } from './types';
-import { initCloud, signInWithGoogle, signOutUser, loadWorkspace, saveWorkspace } from './lib/cloudSync';
+import { initCloud, signInWithEmail, signUpWithEmail, signOutUser, loadWorkspace, saveWorkspace, CloudUser } from './lib/cloudSync';
 import { INITIAL_BRAND_DATA, STYLE_OPTIONS, LOGO_TYPES, PRINT_MATERIALS, DIGITAL_ASSETS, MERCH_ASSETS, FAITH_ASSETS, SAMPLE_BRAND_SUGGESTIONS } from './data';
 import InteractiveShowcase from './components/InteractiveShowcase';
 
@@ -61,11 +60,17 @@ export default function App() {
 
   // Cloud account & sync
   const [cloudAvailable, setCloudAvailable] = useState<boolean>(false);
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<CloudUser | null>(null);
   const [cloudReady, setCloudReady] = useState<boolean>(false);
   const [cloudStatus, setCloudStatus] = useState<'idle' | 'loading' | 'syncing' | 'synced' | 'error'>('idle');
   const [authError, setAuthError] = useState<string | null>(null);
   const cloudSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Email/password auth form state
+  const [authEmail, setAuthEmail] = useState<string>('');
+  const [authPassword, setAuthPassword] = useState<string>('');
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
+  const [authLoading, setAuthLoading] = useState<boolean>(false);
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
 
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [isProcessingPdf, setIsProcessingPdf] = useState<boolean>(false);
@@ -140,7 +145,7 @@ export default function App() {
     }
   };
 
-  // Initialize cloud sync (degrades to local-only when Firebase isn't configured)
+  // Initialize cloud sync (degrades to local-only when Supabase isn't configured)
   useEffect(() => {
     initCloud((u) => {
       setUser(u);
@@ -154,7 +159,7 @@ export default function App() {
   useEffect(() => {
     if (!user || cloudReady) return;
     let cancelled = false;
-    loadWorkspace(user.uid)
+    loadWorkspace(user.id)
       .then((remote) => {
         if (cancelled) return;
         if (remote) {
@@ -201,7 +206,7 @@ export default function App() {
     setCloudStatus('syncing');
     if (cloudSaveTimer.current) clearTimeout(cloudSaveTimer.current);
     cloudSaveTimer.current = setTimeout(() => {
-      saveWorkspace(user.uid, {
+      saveWorkspace(user.id, {
         brandData,
         roughIdea,
         stressTestResult,
@@ -220,13 +225,30 @@ export default function App() {
     };
   }, [user, cloudReady, brandData, roughIdea, stressTestResult, marketResearch, evaluation, brandGuide]);
 
-  const handleSignIn = async () => {
+  const handleAuthSubmit = async () => {
     setAuthError(null);
+    setAuthNotice(null);
+    if (!authEmail.trim() || !authPassword) {
+      setAuthError("Enter your email and password.");
+      return;
+    }
+    setAuthLoading(true);
     try {
-      await signInWithGoogle();
+      if (authMode === 'signup') {
+        const { needsConfirmation } = await signUpWithEmail(authEmail.trim(), authPassword);
+        if (needsConfirmation) {
+          setAuthNotice("Check your email to confirm your account, then sign in.");
+          setAuthMode('signin');
+        }
+      } else {
+        await signInWithEmail(authEmail.trim(), authPassword);
+      }
+      setAuthPassword('');
     } catch (e: any) {
-      console.error("Sign-in failed", e);
-      setAuthError(e.message || "Sign-in failed. Please try again.");
+      console.error("Auth failed", e);
+      setAuthError(e.message || "Something went wrong. Please try again.");
+    } finally {
+      setAuthLoading(false);
     }
   };
 
@@ -920,7 +942,7 @@ export default function App() {
                     cloudStatus === 'error' ? 'text-red-500' :
                     cloudStatus === 'syncing' || cloudStatus === 'loading' ? 'text-amber-500 animate-pulse' : 'text-emerald-600'
                   }`} />
-                  <span className="text-[10px] font-mono text-ink truncate flex-1" title={user.email || ''}>{user.email || user.displayName || 'Signed in'}</span>
+                  <span className="text-[10px] font-mono text-ink truncate flex-1" title={user.email || ''}>{user.email || 'Signed in'}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-[9px] font-bold uppercase tracking-widest font-mono text-editorial-secondary">
@@ -935,14 +957,49 @@ export default function App() {
               </div>
             ) : (
               <div className="space-y-2">
-                <button
-                  onClick={handleSignIn}
-                  className="w-full px-3 py-2 bg-ink text-paper hover:bg-[#333333] transition flex items-center justify-center gap-2 text-[10px] font-bold font-mono uppercase tracking-wider cursor-pointer"
+                <span className="text-[9px] font-bold uppercase tracking-widest font-mono text-editorial-secondary block">
+                  {authMode === 'signup' ? 'Create an account to save' : 'Sign in to save your work'}
+                </span>
+                <form
+                  onSubmit={(e) => { e.preventDefault(); handleAuthSubmit(); }}
+                  className="space-y-2"
                 >
-                  <Cloud className="w-3.5 h-3.5" /> Sign in to save
+                  <input
+                    type="email"
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    placeholder="you@email.com"
+                    autoComplete="email"
+                    className="w-full bg-white dark:bg-zinc-900 border border-editorial-border rounded-none p-2 text-[11px] text-ink focus:border-ink focus:outline-none font-mono"
+                  />
+                  <input
+                    type="password"
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                    placeholder="Password"
+                    autoComplete={authMode === 'signup' ? 'new-password' : 'current-password'}
+                    className="w-full bg-white dark:bg-zinc-900 border border-editorial-border rounded-none p-2 text-[11px] text-ink focus:border-ink focus:outline-none font-mono"
+                  />
+                  <button
+                    type="submit"
+                    disabled={authLoading}
+                    className="w-full px-3 py-2 bg-ink text-paper hover:bg-[#333333] transition flex items-center justify-center gap-2 text-[10px] font-bold font-mono uppercase tracking-wider cursor-pointer disabled:opacity-60"
+                  >
+                    {authLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Cloud className="w-3.5 h-3.5" />}
+                    {authMode === 'signup' ? 'Sign up' : 'Sign in'}
+                  </button>
+                </form>
+                {authNotice && (
+                  <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono leading-normal">{authNotice}</p>
+                )}
+                <button
+                  onClick={() => { setAuthMode(authMode === 'signup' ? 'signin' : 'signup'); setAuthError(null); setAuthNotice(null); }}
+                  className="text-[9px] font-bold uppercase tracking-widest font-mono text-editorial-secondary hover:text-ink cursor-pointer"
+                >
+                  {authMode === 'signup' ? '← Have an account? Sign in' : "New here? Create an account →"}
                 </button>
                 <p className="text-[10px] text-editorial-secondary/80 font-mono leading-normal">
-                  Without signing in, your work is saved in this browser only and may be lost if you clear data.
+                  Without an account, your work is saved in this browser only and may be lost if you clear data.
                 </p>
               </div>
             )
@@ -1036,7 +1093,7 @@ export default function App() {
             <div className="p-3 bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-300 text-xs flex items-start justify-between gap-2 border border-red-100 dark:border-red-900/30">
               <div className="flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
-                <span>Sign-in failed: {authError}</span>
+                <span>{authError}</span>
               </div>
               <button onClick={() => setAuthError(null)} className="text-[10px] uppercase font-bold tracking-wider hover:underline text-red-600 dark:text-red-400 cursor-pointer">Dismiss</button>
             </div>

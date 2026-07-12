@@ -20,6 +20,7 @@ app.get('/healthz', (_req, res) => {
     status: 'ok',
     gemini: !!process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY',
     liveSearch: !!process.env.TAVILY_API_KEY,
+    accounts: !!process.env.SUPABASE_URL && !!process.env.SUPABASE_ANON_KEY,
     time: new Date().toISOString()
   });
 });
@@ -530,23 +531,13 @@ Respond with valid JSON:
   }
 });
 
-// 0.7. API: Runtime Firebase config (empty file => cloud sync disabled)
-app.get('/api/firebase-config', async (_req, res) => {
-  try {
-    const fs = await import('fs/promises');
-    const raw = await fs.readFile(path.join(process.cwd(), 'firebase-applet-config.json'), 'utf-8');
-    const trimmed = raw.trim();
-    if (!trimmed) {
-      return res.json({ configured: false });
-    }
-    const config = JSON.parse(trimmed);
-    if (!config.apiKey || !config.projectId) {
-      return res.json({ configured: false });
-    }
-    res.json({ configured: true, config });
-  } catch {
-    res.json({ configured: false });
-  }
+// 0.7. API: Runtime client config (Supabase). The anon key is safe to expose;
+// Row-Level Security enforces access. Missing => app runs in local-only mode.
+app.get('/api/config', (_req, res) => {
+  res.json({
+    supabaseUrl: process.env.SUPABASE_URL || '',
+    supabaseAnonKey: process.env.SUPABASE_ANON_KEY || ''
+  });
 });
 
 // PDF Pitch parsing & processing

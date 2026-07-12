@@ -16,3 +16,7 @@ services:
         sync: false   # set in the Render dashboard (secret)
       - key: TAVILY_API_KEY
         sync: false   # set in the Render dashboard (secret)
+      - key: SUPABASE_URL
+        sync: false   # user accounts + cloud save
+      - key: SUPABASE_ANON_KEY
+        sync: false   # anon key is client-safe (RLS enforces access)
