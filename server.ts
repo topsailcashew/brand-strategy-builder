@@ -68,6 +68,43 @@ async function tavilySearch(query: string) {
   }>;
 }
 
+// Gemini occasionally returns transient 503 (UNAVAILABLE / "high demand") or
+// 429 (rate limit) errors. Retry those a few times with exponential backoff so
+// spikes self-heal instead of surfacing to the user. Non-transient errors throw
+// immediately; if all retries are exhausted, throw a clean, friendly message.
+function isTransientAiError(e: any): boolean {
+  const msg = String(e?.message || e || '');
+  const code = e?.status ?? e?.code;
+  return (
+    code === 503 || code === 429 ||
+    /\b(503|429)\b/.test(msg) ||
+    /UNAVAILABLE|RESOURCE_EXHAUSTED|overloaded|high demand|try again later/i.test(msg)
+  );
+}
+
+// The standard flash models can be rate-limited/overloaded (429/503) on some
+// keys; the lite model has separate capacity and stays responsive, so we fall
+// back to it after the first failed attempt on the requested model.
+const FALLBACK_MODEL = 'gemini-3.1-flash-lite';
+
+async function generateContentWithRetry(params: any, attempts = 4): Promise<any> {
+  const primary = params.model;
+  for (let i = 0; i < attempts; i++) {
+    // One try on the requested model, then switch to the resilient fallback.
+    const model = i >= 1 && FALLBACK_MODEL !== primary ? FALLBACK_MODEL : primary;
+    try {
+      return await ai!.models.generateContent({ ...params, model });
+    } catch (e: any) {
+      if (!isTransientAiError(e)) throw e;              // real error — surface it
+      if (i === attempts - 1) {
+        throw new Error("The AI service is temporarily overloaded. Please try again in a moment.");
+      }
+      const delay = 600 * 2 ** i + Math.floor(Math.random() * 400); // 0.6s, 1.2s, 2.4s + jitter
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+}
+
 // 0. API: Stress Test Rough Idea
 app.post('/api/stress-test-idea', async (req, res) => {
   try {
@@ -172,7 +209,7 @@ Respond with valid JSON according to this structure:
 }
 `;
 
-    const response = await ai.models.generateContent({
+    const response = await generateContentWithRetry({
       model: 'gemini-3.5-flash',
       contents: prompt,
       config: {
@@ -290,7 +327,7 @@ app.post('/api/market-research', async (req, res) => {
       .join('\n\n');
 
     // Step 2: structure the live web findings into JSON with Gemini (no grounding)
-    const structured = await ai.models.generateContent({
+    const structured = await generateContentWithRetry({
       model: 'gemini-3.5-flash',
       contents: `
 You are a market research analyst. Using ONLY the live web search results below, produce a structured analysis for this business concept. Do not invent competitors or facts that are not supported by the results; if the results are thin, say so honestly in the summary.
@@ -375,7 +412,7 @@ app.post('/api/challenge-feedback', async (req, res) => {
       business?.name ? `Business: ${business.name} (${business.industry || 'industry unspecified'})` : ''
     ].filter(Boolean).join('\n');
 
-    const response = await ai.models.generateContent({
+    const response = await generateContentWithRetry({
       model: 'gemini-3.5-flash',
       contents: `
 You are a tough but fair venture strategist stress-testing a founder. You previously asked them this challenge question:
@@ -482,7 +519,7 @@ Respond with valid JSON:
 }
 `;
 
-    const response = await ai.models.generateContent({
+    const response = await generateContentWithRetry({
       model: 'gemini-3.5-flash',
       contents: prompt,
       config: {
@@ -590,8 +627,8 @@ Please:
 
 Make sure the output is written as a clear, detailed, and clean first-person or third-person pitch that can be put into our brand builder's rough idea box. Do not include any meta-commentary, markdown headers, or introductory/concluding remarks. Just output the clean, comprehensive business pitch.
 `;
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
+        const response = await generateContentWithRetry({
+          model: 'gemini-3.5-flash',
           contents: [
             { text: prompt },
             {
@@ -659,7 +696,7 @@ Respond with valid JSON according to this structure:
 }
 `;
 
-    const response = await ai.models.generateContent({
+    const response = await generateContentWithRetry({
       model: 'gemini-3.5-flash',
       contents: prompt,
       config: {
@@ -772,7 +809,7 @@ Respond strictly in JSON matching this structure:
 }
 `;
 
-    const response = await ai.models.generateContent({
+    const response = await generateContentWithRetry({
       model: 'gemini-3.5-flash',
       contents: prompt,
       config: {
@@ -929,7 +966,7 @@ app.post('/api/generate-image', async (req, res) => {
     }
 
     // Try calling the image generation model (requires paid key flow/permission)
-    const response = await ai.models.generateContent({
+    const response = await generateContentWithRetry({
       model: 'gemini-3.1-flash-lite-image',
       contents: {
         parts: [{ text: prompt }]
